@@ -210,20 +210,60 @@ footer{margin-top:40px;color:var(--muted);font-size:12.5px;border-top:1px solid 
 <main class="wrap" id="app"></main>
 
 <footer class="wrap">
-  <p>この画面は試作版です。一覧の釣行は例として入れたサンプルで、実在の主催者や施設とは関係ありません。申し込みと募集は、このブラウザ内にだけ保存されます。</p>
+  <p>この画面は試作版です。一覧の釣行は例として入れたサンプルで、実在の主催者や施設とは関係ありません。申し込みと募集データは、このブラウザ内にのみ保存されます。会員情報はSupabaseで管理しています。</p>
 </footer>
 
+<script src="https://unpkg.com/@supabase/supabase-js@2.47.10/dist/umd/supabase.min.js"></script>
 <script>
-/* ---------- 簡易ログイン（試作版・localStorage）---------- */
-const AUTH_KEY="fishing_off_auth";
-const USERS_KEY="fishing_off_users";
+/* ---------- Supabase 認証 ---------- */
+const _supabase = window.supabase.createClient(
+  'https://ltqsmfzrwqluylgzxpbt.supabase.co',
+  'sb_publishable_Wxa_Ud14GGDWeioktnExFw_IFiHHNGK'
+);
 let currentUser=null;
-function loadUsers(){try{return JSON.parse(localStorage.getItem(USERS_KEY))||{}}catch(e){return {}}}
-function saveUsers(u){try{localStorage.setItem(USERS_KEY,JSON.stringify(u))}catch(e){}}
-function loadAuth(){try{const e=localStorage.getItem(AUTH_KEY);if(e)currentUser=JSON.parse(e)}catch(e){currentUser=null}}
-function saveAuth(){try{if(currentUser)localStorage.setItem(AUTH_KEY,JSON.stringify(currentUser));else localStorage.removeItem(AUTH_KEY)}catch(e){}}
-function logout(){currentUser=null;saveAuth();updateAuthUI();route()}
-loadAuth();
+let _authReady=false;
+
+/* セッション復元 */
+async function initAuth(){
+  const {data:{session}}=await _supabase.auth.getSession();
+  if(session){
+    const u=session.user;
+    currentUser={
+      id:u.id,
+      email:u.email,
+      name:u.user_metadata?.name||u.email.split("@")[0],
+      joined:(u.created_at||"").slice(0,10),
+      bio:u.user_metadata?.bio||""
+    };
+  }
+  _authReady=true;
+  updateAuthUI();
+  route();
+}
+
+/* 認証状態の変化を監視 */
+_supabase.auth.onAuthStateChange((event,session)=>{
+  if(session){
+    const u=session.user;
+    currentUser={
+      id:u.id,
+      email:u.email,
+      name:u.user_metadata?.name||u.email.split("@")[0],
+      joined:(u.created_at||"").slice(0,10),
+      bio:u.user_metadata?.bio||""
+    };
+  } else {
+    currentUser=null;
+  }
+  if(_authReady){updateAuthUI();route()}
+});
+
+async function logout(){
+  await _supabase.auth.signOut();
+  currentUser=null;
+  updateAuthUI();
+  route();
+}
 function updateAuthUI(){
   const nav=document.getElementById("nav");if(!nav)return;
   const old=document.getElementById("auth-nav");if(old)old.remove();
@@ -564,18 +604,20 @@ function viewMy(){
     <button class="btn ghost" id="logout-my" type="button">ログアウト</button>
     <span class="note" id="clrmsg" style="align-self:center"></span>
   </div>`;
-  $("save-profile").onclick=()=>{
+  $("save-profile").onclick=async()=>{
     const newName=$("my-name").value.trim();
     const newBio=$("my-bio").value.trim();
     if(!newName){$("save-msg").textContent="ニックネームを入力してください。";return}
-    currentUser.name=newName;currentUser.bio=newBio;saveAuth();
-    const users=loadUsers();
-    if(users[currentUser.email]){users[currentUser.email].name=newName;users[currentUser.email].bio=newBio;saveUsers(users)}
+    $("save-profile").disabled=true;$("save-profile").textContent="保存中…";
+    const {error}=await _supabase.auth.updateUser({data:{name:newName,bio:newBio}});
+    $("save-profile").disabled=false;$("save-profile").textContent="保存";
+    if(error){$("save-msg").innerHTML=`<span style="color:var(--warn)">保存に失敗しました</span>`;return}
+    currentUser.name=newName;currentUser.bio=newBio;
     updateAuthUI();
     $("save-msg").innerHTML=`<span style="color:var(--ok)">保存しました</span>`;
     setTimeout(()=>{if($("save-msg"))$("save-msg").textContent=""},2000);
   };
-  $("logout-my").onclick=()=>{logout()};
+  $("logout-my").onclick=()=>logout();
   let armed=false;
   $("clr").onclick=()=>{
     if(!armed){armed=true;$("clr").textContent="もう一度押すと、申し込みと募集をすべて消します";return}
@@ -614,18 +656,24 @@ function viewLogin(){
       </button>
       <p class="auth-footer">アカウントをお持ちでない方は <a href="#signup">新規登録</a></p>
     </div>
-    <p class="note" style="text-align:center;margin-top:12px">※ 試作版のため、認証はこのブラウザ内でのみ動作します。<br>Googleログインは今後対応予定です。</p>
+    <p class="note" style="text-align:center;margin-top:12px">※ Googleログインは今後対応予定です。</p>
   </div>`;
   initPwToggles();
   $("g-login").onclick=()=>{$("lerr").textContent="Googleログインは今後対応予定です。メールアドレスで登録してください。"};
-  $("lf").onsubmit=ev=>{ev.preventDefault();
+  $("lf").onsubmit=async ev=>{ev.preventDefault();
     const email=$("le").value.trim(),pw=$("lp").value;
     if(!email||!pw){$("lerr").textContent="メールアドレスとパスワードを入力してください。";return}
-    const users=loadUsers();
-    if(!users[email]){$("lerr").textContent="このメールアドレスは登録されていません。";return}
-    if(users[email].pw!==pw){$("lerr").textContent="パスワードが正しくありません。";return}
-    currentUser={email,name:users[email].name,joined:users[email].joined||new Date().toISOString().slice(0,10),bio:users[email].bio||""};
-    saveAuth();updateAuthUI();location.hash="my"};
+    const btn=ev.target.querySelector('button[type="submit"]');
+    btn.disabled=true;btn.textContent="ログイン中…";
+    const {error}=await _supabase.auth.signInWithPassword({email,password:pw});
+    if(error){
+      btn.disabled=false;btn.textContent="ログイン";
+      if(error.message.includes("Invalid login")){$("lerr").textContent="メールアドレスまたはパスワードが正しくありません。"}
+      else if(error.message.includes("Email not confirmed")){$("lerr").textContent="メールアドレスの確認が完了していません。受信トレイを確認してください。"}
+      else{$("lerr").textContent="ログインに失敗しました: "+error.message}
+      return;
+    }
+    updateAuthUI();location.hash="my"};
 }
 
 function viewSignup(){
@@ -650,7 +698,7 @@ function viewSignup(){
       </button>
       <p class="auth-footer">すでにアカウントをお持ちの方は <a href="#login">ログイン</a></p>
     </div>
-    <p class="note" style="text-align:center;margin-top:12px">※ 試作版のため、アカウント情報はこのブラウザ内にのみ保存されます。</p>
+    <p class="note" style="text-align:center;margin-top:12px">※ 登録後、確認メールが届きます。リンクをクリックしてからログインしてください。</p>
   </div>`;
   initPwToggles();
   $("g-signup").onclick=()=>{$("serr").textContent="Googleログインは今後対応予定です。メールアドレスで登録してください。"};
@@ -659,18 +707,32 @@ function viewSignup(){
     const s=(pw.length>=8?1:0)+(/[A-Z]/.test(pw)?1:0)+(/[0-9]/.test(pw)?1:0)+(/[^A-Za-z0-9]/.test(pw)?1:0);
     const labels=["弱い","やや弱い","普通","強い"];const colors=["var(--warn)","#e8a020","var(--muted)","var(--ok)"];
     el.innerHTML=`パスワード強度: <span style="color:${colors[Math.min(s,3)]};font-weight:700">${labels[Math.min(s,3)]}</span>`;};
-  $("sf").onsubmit=ev=>{ev.preventDefault();
+  $("sf").onsubmit=async ev=>{ev.preventDefault();
     const name=$("sn").value.trim(),email=$("se").value.trim(),pw=$("sp").value,pw2=$("sp2").value;
     if(!name){$("serr").textContent="ニックネームを入力してください。";$("sn").focus();return}
     if(!email){$("serr").textContent="メールアドレスを入力してください。";$("se").focus();return}
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){$("serr").textContent="メールアドレスの形式が正しくありません。";$("se").focus();return}
     if(pw.length<6){$("serr").textContent="パスワードは6文字以上にしてください。";$("sp").focus();return}
     if(pw!==pw2){$("serr").textContent="パスワードが一致しません。";$("sp2").focus();return}
-    const users=loadUsers();
-    if(users[email]){$("serr").textContent="このメールアドレスはすでに登録されています。";return}
-    const joined=new Date().toISOString().slice(0,10);
-    users[email]={name,pw,joined,bio:""};saveUsers(users);
-    currentUser={email,name,joined,bio:""};saveAuth();updateAuthUI();location.hash="my"};
+    const btn=ev.target.querySelector('button[type="submit"]');
+    btn.disabled=true;btn.textContent="登録中…";
+    const {data,error}=await _supabase.auth.signUp({
+      email,password:pw,
+      options:{data:{name,bio:""}}
+    });
+    if(error){
+      btn.disabled=false;btn.textContent="アカウントを作成";
+      if(error.message.includes("already registered")){$("serr").textContent="このメールアドレスはすでに登録されています。"}
+      else{$("serr").textContent="登録に失敗しました: "+error.message}
+      return;
+    }
+    /* メール確認が必要な場合 */
+    if(data.user&&!data.session){
+      btn.disabled=false;btn.textContent="アカウントを作成";
+      $("serr").innerHTML=`<span style="color:var(--ok)">確認メールを送信しました！<br>メールのリンクをクリックしてからログインしてください。</span>`;
+      return;
+    }
+    updateAuthUI();location.hash="my"};
 }
 
 /* ---------- router ---------- */
@@ -697,5 +759,5 @@ function route(){
   window.scrollTo({top:0});
 }
 window.addEventListener("hashchange",route);
-route();
+initAuth();
 </script>
