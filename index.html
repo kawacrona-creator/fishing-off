@@ -213,18 +213,22 @@ footer{margin-top:40px;color:var(--muted);font-size:12.5px;border-top:1px solid 
   <p>この画面は試作版です。一覧の釣行は例として入れたサンプルで、実在の主催者や施設とは関係ありません。申し込みと募集データは、このブラウザ内にのみ保存されます。会員情報はSupabaseで管理しています。</p>
 </footer>
 
-<script src="https://unpkg.com/@supabase/supabase-js@2.47.10/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.min.js"></script>
 <script>
 /* ---------- Supabase 認証 ---------- */
-const _supabase = window.supabase.createClient(
-  'https://ltqsmfzrwqluylgzxpbt.supabase.co',
-  'sb_publishable_Wxa_Ud14GGDWeioktnExFw_IFiHHNGK'
-);
-let currentUser=null;
-let _authReady=false;
+var currentUser=null;
+var _authReady=false;
+var _supabase=null;
+try{
+  _supabase = window.supabase.createClient(
+    'https://ltqsmfzrwqluylgzxpbt.supabase.co',
+    'sb_publishable_Wxa_Ud14GGDWeioktnExFw_IFiHHNGK'
+  );
+}catch(e){console.error("Supabase初期化エラー:",e)}
 
 /* セッション復元 */
 async function initAuth(){
+  if(!_supabase){_authReady=true;updateAuthUI();route();return}
   const {data:{session}}=await _supabase.auth.getSession();
   if(session){
     const u=session.user;
@@ -242,7 +246,7 @@ async function initAuth(){
 }
 
 /* 認証状態の変化を監視 */
-_supabase.auth.onAuthStateChange((event,session)=>{
+if(_supabase) _supabase.auth.onAuthStateChange((event,session)=>{
   if(session){
     const u=session.user;
     currentUser={
@@ -259,7 +263,7 @@ _supabase.auth.onAuthStateChange((event,session)=>{
 });
 
 async function logout(){
-  await _supabase.auth.signOut();
+  if(_supabase) await _supabase.auth.signOut();
   currentUser=null;
   updateAuthUI();
   route();
