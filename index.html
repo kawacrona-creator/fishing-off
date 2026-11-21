@@ -303,6 +303,37 @@ function areaOptions(sel,withCount){
   return REGIONS.map(([r,list])=>`<optgroup label="${r}">${list.map(a=>`<option value="${a}"${sel===a?" selected":""}>${a}${withCount&&c[a]?`(${c[a]}件)`:""}</option>`).join("")}</optgroup>`).join("");
 }
 const LEVELS=["初心者歓迎","誰でも","経験者向け"];
+/* --- Supabase DB helpers --- */
+let _dbEvents=[];  // DBから取得したイベント
+let _dbApps={};    // event_id -> [{name,experience,message}]
+async function loadEvents(){
+  if(!_supabase)return;
+  try{
+    const {data,error}=await _supabase.from("events").select("*").order("date",{ascending:true});
+    if(error){console.error("events取得エラー:",error);return}
+    _dbEvents=(data||[]).map(r=>({
+      id:r.id, user_id:r.user_id, title:r.title, type:r.type, area:r.area, place:r.place,
+      mapUrl:r.map_url||"", date:r.date, time:r.time, end:r.end_time||"",
+      fish:r.fish||"", level:r.level, fee:r.fee||0, cap:r.cap||6, joined:0,
+      org:r.org, rental:!!r.rental, access:r.access||[], items:r.items||"特になし",
+      desc:r.description||"", fromDB:true
+    }));
+  }catch(e){console.error("events取得例外:",e)}
+}
+async function loadApplications(){
+  if(!_supabase)return;
+  try{
+    const {data,error}=await _supabase.from("applications").select("*");
+    if(error){console.error("applications取得エラー:",error);return}
+    _dbApps={};
+    (data||[]).forEach(r=>{
+      if(!_dbApps[r.event_id])_dbApps[r.event_id]=[];
+      _dbApps[r.event_id].push({name:r.name,exp:r.experience,msg:r.message||"",at:new Date(r.created_at).getTime(),user_id:r.user_id});
+    });
+  }catch(e){console.error("applications取得例外:",e)}
+}
+async function loadAllData(){await Promise.all([loadEvents(),loadApplications()])}
+/* localStorage fallback for offline / sample data */
 const KEY="fishing-off-v1";
 let S={posted:[],applied:{}};
 try{const r=localStorage.getItem(KEY);if(r){const o=JSON.parse(r);S.posted=o.posted||[];S.applied=o.applied||{}}}catch(e){}
@@ -321,8 +352,11 @@ const mapLink=e=>e.mapUrl||"https://www.google.com/maps/search/?api=1&query="+en
 const WD=["日","月","火","水","木","金","土"];
 const pd=s=>{const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)};
 function events(){
-  return SAMPLE.concat(S.posted).map(e=>({...e,area:LEGACY[e.area]??e.area,access:e.access||ACC[e.id]||[],joined:e.joined+((S.applied[e.id]||[]).length)}))
-    .sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  return SAMPLE.concat(S.posted).concat(_dbEvents).map(e=>{
+    const localApps=(S.applied[e.id]||[]).length;
+    const dbApps=(_dbApps[e.id]||[]).length;
+    return {...e,area:LEGACY[e.area]??e.area,access:e.access||ACC[e.id]||[],joined:(e.fromDB?0:e.joined)+localApps+dbApps};
+  }).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
 }
 const byId=id=>events().find(e=>e.id===id);
 function dateBlock(e){const d=pd(e.date),w=d.getDay();
@@ -479,11 +513,20 @@ function viewEvent(id){
     </section>
   </div>`;
   const f=$("af");
-  if(f)f.onsubmit=ev=>{ev.preventDefault();
+  if(f)f.onsubmit=async ev=>{ev.preventDefault();
     const name=$("an").value.trim();
     if(!name){$("aerr").textContent="お名前を入力してください。";$("an").focus();return}
-    (S.applied[e.id]=S.applied[e.id]||[]).push({name,exp:$("ae").value,msg:$("am").value.trim(),at:Date.now()});
-    save();viewEvent(id);window.scrollTo({top:0})};
+    /* Supabaseに保存を試みる */
+    if(_supabase){
+      const row={event_id:e.id,user_id:currentUser?currentUser.id:null,name:name,experience:$("ae").value,message:$("am").value.trim()};
+      const {error}=await _supabase.from("applications").insert(row);
+      if(error){console.error("申込エラー:",error);$("aerr").textContent="保存に失敗しました: "+error.message;return}
+      await loadAllData();
+    } else {
+      (S.applied[e.id]=S.applied[e.id]||[]).push({name,exp:$("ae").value,msg:$("am").value.trim(),at:Date.now()});
+      save();
+    }
+    viewEvent(id);window.scrollTo({top:0})};
 }
 
 function viewPost(){
@@ -532,7 +575,7 @@ function viewPost(){
     $("pmap").dispatchEvent(new Event("input"));};
   $("pmap").oninput=()=>{const r=parseMap($("pmap").value);
     $("pmapst").textContent=r===""?"Googleマップで集合場所を開き、「共有」→「リンクをコピー」で取得したリンクを貼り付けます。貼らない場合は、釣り場の名前で検索するリンクになります。":r===null?"このリンクは読み取れません。Googleマップの共有リンクを貼り付けてください。":"地図のリンクを認識しました。"};
-  $("pf").onsubmit=ev=>{ev.preventDefault();
+  $("pf").onsubmit=async ev=>{ev.preventDefault();
     const v=id=>$(id).value.trim();
     const miss=[["pt","タイトル"],["ppl","釣り場・集合場所・集合駅"],["pd","日付"],["pog","主催者名"]].find(([i])=>!v(i));
     if(miss){$("perr").textContent=miss[1]+"を入力してください。";$(miss[0]).focus();return}
@@ -542,7 +585,18 @@ function viewPost(){
     const e={id:"u"+Date.now().toString(36),title:v("pt"),type:v("pty"),area:v("par"),place:v("ppl"),date:v("pd"),time:v("ptm"),end:v("pen"),
       fish:v("pf2"),level:v("plv"),fee:Math.max(0,parseInt(v("pfee"))||0),cap,joined:1,org:v("pog"),rental:$("prent").checked,access:[...document.querySelectorAll('input[name="acc"]:checked')].map(i=>i.value),mapUrl:mp,
       items:v("pit")||"特になし",desc:v("pds")||"詳しくは当日お伝えします。"};
-    S.posted.push(e);save();location.hash="event-"+e.id};
+    /* Supabaseに保存を試みる */
+    if(_supabase && currentUser){
+      const row={user_id:currentUser.id,title:e.title,type:e.type,area:e.area,place:e.place,
+        map_url:e.mapUrl,date:e.date,time:e.time,end_time:e.end,fish:e.fish,level:e.level,
+        fee:e.fee,cap:e.cap,org:e.org,rental:e.rental,access:e.access,items:e.items,description:e.desc};
+      const {data,error}=await _supabase.from("events").insert(row).select().single();
+      if(error){console.error("投稿エラー:",error);$("perr").textContent="保存に失敗しました: "+error.message;return}
+      await loadAllData();
+      location.hash="event-"+data.id;
+    } else {
+      S.posted.push(e);save();location.hash="event-"+e.id;
+    }};
 }
 
 function viewOrganizers(){
