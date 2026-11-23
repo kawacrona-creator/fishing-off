@@ -531,6 +531,7 @@ function viewEvent(id){
     viewEvent(id);window.scrollTo({top:0})};
 }
 
+var _pplTimer=null,_pplMap=null,_pplMarker=null;
 function viewPost(){
   _pplMap=null;_pplMarker=null;
   const today=new Date();const iso=new Date(today.getTime()-today.getTimezoneOffset()*60000).toISOString().slice(0,10);
@@ -586,7 +587,6 @@ function viewPost(){
     document.querySelectorAll('input[name="acc"]').forEach(cb=>{cb.checked=(p.access||[]).includes(cb.value)});
     $("pmap").dispatchEvent(new Event("input"));$("ppl").dispatchEvent(new Event("input"));};
   /* 集合場所入力→Leafletマッププレビュー(ピン移動可能) */
-  let _pplTimer=null,_pplMap=null,_pplMarker=null;
   function updateMapLink(){
     const la=$("plat").value,lo=$("plng").value;
     if(la&&lo)$("pplmaplink").href="https://www.google.com/maps?q="+la+","+lo;
