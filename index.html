@@ -213,6 +213,7 @@ footer{margin-top:40px;color:var(--muted);font-size:12.5px;border-top:1px solid 
 
 <footer class="wrap">
   <p>この画面は試作版です。一覧の釣行は例として入れたサンプルで、実在の主催者や施設とは関係ありません。申し込みと募集データは、このブラウザ内にのみ保存されます。会員情報はSupabaseで管理しています。</p>
+  <p style="margin-top:8px"><a href="#privacy" style="color:var(--muted)">プライバシーポリシー</a></p>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.min.js"></script>
@@ -652,6 +653,20 @@ function viewPost(){
     }};
 }
 
+function viewPrivacy(){
+  $app.innerHTML=`
+  <a class="back" href="#home">&larr; トップに戻る</a>
+  <section class="panel" style="margin-top:8px">
+    <h1 style="font-size:24px;font-weight:900;margin:0 0 16px">プライバシーポリシー</h1>
+    <p style="line-height:1.9;margin:0 0 16px">フィッシングオフはオンライン上のプライバシー保護について下記の通りのポリシーを持ってサービスを提供してゆきます。なお、このポリシーは随時追加、変更される場合があります。</p>
+    <ul style="line-height:1.9;padding-left:1.2em;margin:0;display:grid;gap:14px">
+      <li>フィッシングオフでは、円滑かつ安全にサービスを提供し、釣行の開催を支援するために必要な情報を除き、個人が特定される情報を収集すること自体をはじめから極力避けるようにしております。</li>
+      <li>フィッシングオフは、会員の登録情報をはじめとした当サイト上で管理される情報について、可能な限りこれを保護します。特に、メールアドレスや電話番号をはじめとした個人が特定される情報を第三者に譲渡、販売することは行いません。</li>
+    </ul>
+  </section>`;
+  window.scrollTo({top:0});
+}
+
 function viewOrganizers(){
   $app.innerHTML=`
   <section class="hero"><h1>釣り仲間を集めたい主催者の方へ</h1>
@@ -860,6 +875,7 @@ function route(){
     viewPost();
   }
   else if(h==="organizers")viewOrganizers();
+  else if(h==="privacy")viewPrivacy();
   else if(h==="my")viewMy();
   else if(h==="home"){viewHome();r="home"}
   else if(h==="landing"){viewLanding();r="landing"}
