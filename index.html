@@ -447,7 +447,16 @@ function viewHome(){
     </div>
   </section>
   <div class="listhead"><h2>開催予定の釣行</h2><span class="count" id="count"></span></div>
-  <div class="events" id="events"></div>`;
+  <div class="events" id="events"></div>
+  <section class="panel" style="margin-top:28px">
+    <h2 style="font-size:20px;font-weight:900;margin-bottom:12px">🎣 フィッシングオフとは？</h2>
+    <p style="line-height:1.8;margin:0 0 14px">フィッシングオフは、釣りオフ会の運営支援サービスです。釣りをする仲間を見つけ、そして仲間とつなぐ、さまざまなお手伝いをします。</p>
+    <p style="line-height:1.8;margin:0 0 10px">たとえば</p>
+    <ul style="line-height:1.9;padding-left:1.2em;margin:0 0 10px">
+      <li>「<b>仲間を集めて釣りしたいんだけど人数集めや連絡が大変で…</b>」という方<br>フィッシングオフ上で釣行の開催登録をしてみませんか？ 釣行の開催に必要なさまざまな雑用をお手伝いします。</li>
+      <li style="margin-top:8px">「<b>釣りしたいけどする相手がいないし、いても都合がなかなか合わなくて…</b>」という方<br>フィッシングオフ上で参加者を募集している釣行に参加してみませんか？ 似たような悩みをかかえている人は意外とあなたの近くにも沢山いるかもしれません。</li>
+    </ul>
+  </section>`;
   const upd=()=>{
     const q=F.q.trim().toLowerCase();
     const list=events().filter(e=>
