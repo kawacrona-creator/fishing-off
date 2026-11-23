@@ -806,10 +806,13 @@ function viewLogin(){
       </button>
       <p class="auth-footer">アカウントをお持ちでない方は <a href="#signup">新規登録</a></p>
     </div>
-    <p class="note" style="text-align:center;margin-top:12px">※ Googleログインは今後対応予定です。</p>
   </div>`;
   initPwToggles();
-  $("g-login").onclick=()=>{$("lerr").textContent="Googleログインは今後対応予定です。メールアドレスで登録してください。"};
+  $("g-login").onclick=async()=>{
+    $("lerr").textContent="";
+    const {error}=await _supabase.auth.signInWithOAuth({provider:"google",options:{redirectTo:location.origin+"/#my"}});
+    if(error){$("lerr").textContent="Googleログインに失敗しました: "+error.message}
+  };
   $("lf").onsubmit=async ev=>{ev.preventDefault();
     const email=$("le").value.trim(),pw=$("lp").value;
     if(!email||!pw){$("lerr").textContent="メールアドレスとパスワードを入力してください。";return}
@@ -851,7 +854,11 @@ function viewSignup(){
     <p class="note" style="text-align:center;margin-top:12px">※ 登録後、確認メールが届きます。リンクをクリックしてからログインしてください。</p>
   </div>`;
   initPwToggles();
-  $("g-signup").onclick=()=>{$("serr").textContent="Googleログインは今後対応予定です。メールアドレスで登録してください。"};
+  $("g-signup").onclick=async()=>{
+    $("serr").textContent="";
+    const {error}=await _supabase.auth.signInWithOAuth({provider:"google",options:{redirectTo:location.origin+"/#my"}});
+    if(error){$("serr").textContent="Googleログインに失敗しました: "+error.message}
+  };
   $("sp").oninput=()=>{const pw=$("sp").value;const el=$("pw-str");
     if(!pw){el.textContent="";return}
     const s=(pw.length>=8?1:0)+(/[A-Z]/.test(pw)?1:0)+(/[0-9]/.test(pw)?1:0)+(/[^A-Za-z0-9]/.test(pw)?1:0);
