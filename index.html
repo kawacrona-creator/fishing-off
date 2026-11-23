@@ -3,6 +3,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
 <style>
 /* Layout concept: Tennis Off style. Top = search + event list; detail with apply form; organizer post form; organizer pricing; my page. */
 :root{
@@ -530,6 +532,7 @@ function viewEvent(id){
 }
 
 function viewPost(){
+  _pplMap=null;_pplMarker=null;
   const today=new Date();const iso=new Date(today.getTime()-today.getTimezoneOffset()*60000).toISOString().slice(0,10);
   const opt=a=>a.map(x=>`<option>${x}</option>`).join("");
   $app.innerHTML=`
@@ -545,12 +548,14 @@ function viewPost(){
     </div>
     <label class="f" for="ppl">釣り場・集合場所・集合駅（車同乗する場合等）<input id="ppl" maxlength="80" placeholder="例: 大黒海釣り施設 入口前、JR鶴見駅からバス"></label>
     <div id="pplmap" style="display:none;border-radius:10px;overflow:hidden;border:1px solid var(--line);margin:-4px 0 4px">
-      <iframe id="pplmapif" style="width:100%;height:220px;border:0" loading="lazy" referrerpolicy="no-referrer"></iframe>
-      <div style="padding:6px 10px;font-size:12px;color:var(--muted);display:flex;justify-content:space-between;align-items:center">
-        <span>📍 Googleマップで表示中</span>
-        <a id="pplmaplink" href="#" target="_blank" rel="noopener" style="color:var(--accent);font-weight:700;text-decoration:none">大きい地図で見る ↗</a>
+      <div id="pplmapif" style="width:100%;height:250px"></div>
+      <div style="padding:8px 10px;font-size:12px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">
+        <span>📍 ピンをドラッグして位置を調整できます</span>
+        <a id="pplmaplink" href="#" target="_blank" rel="noopener" style="color:var(--accent);font-weight:700;text-decoration:none">Googleマップで開く ↗</a>
       </div>
     </div>
+    <input type="hidden" id="plat" value="">
+    <input type="hidden" id="plng" value="">
     <label class="f" for="pmap">集合場所の地図(任意)<input id="pmap" type="text" inputmode="url" autocomplete="off" placeholder="Googleマップの共有リンクをここに貼り付け"></label>
     <div class="note" id="pmapst">Googleマップで集合場所を開き、「共有」→「リンクをコピー」で取得したリンクを貼り付けます。貼らない場合は、釣り場の名前で検索するリンクになります。</div>
     <div class="grid2">
@@ -580,16 +585,36 @@ function viewPost(){
     $("prent").checked=!!p.rental;$("pit").value=p.items==="特になし"?"":p.items||"";$("pds").value=p.desc==="詳しくは当日お伝えします。"?"":p.desc||"";$("pog").value=p.org||"";
     document.querySelectorAll('input[name="acc"]').forEach(cb=>{cb.checked=(p.access||[]).includes(cb.value)});
     $("pmap").dispatchEvent(new Event("input"));$("ppl").dispatchEvent(new Event("input"));};
-  /* 集合場所入力→Googleマッププレビュー */
-  let _pplTimer=null;
+  /* 集合場所入力→Leafletマッププレビュー(ピン移動可能) */
+  let _pplTimer=null,_pplMap=null,_pplMarker=null;
+  function updateMapLink(){
+    const la=$("plat").value,lo=$("plng").value;
+    if(la&&lo)$("pplmaplink").href="https://www.google.com/maps?q="+la+","+lo;
+  }
+  function showMapAt(lat,lng){
+    if(!_pplMap){
+      _pplMap=L.map("pplmapif",{zoomControl:true,attributionControl:false}).setView([lat,lng],15);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(_pplMap);
+      _pplMarker=L.marker([lat,lng],{draggable:true}).addTo(_pplMap);
+      _pplMarker.on("dragend",()=>{const p=_pplMarker.getLatLng();$("plat").value=p.lat.toFixed(6);$("plng").value=p.lng.toFixed(6);updateMapLink()});
+      _pplMap.on("click",(e)=>{_pplMarker.setLatLng(e.latlng);$("plat").value=e.latlng.lat.toFixed(6);$("plng").value=e.latlng.lng.toFixed(6);updateMapLink()});
+    } else {
+      _pplMap.setView([lat,lng],15);
+      _pplMarker.setLatLng([lat,lng]);
+    }
+    $("plat").value=lat.toFixed(6);$("plng").value=lng.toFixed(6);updateMapLink();
+    $("pplmap").style.display="block";
+    setTimeout(()=>_pplMap.invalidateSize(),100);
+  }
   $("ppl").oninput=()=>{clearTimeout(_pplTimer);const q=$("ppl").value.trim();
     if(q.length<2){$("pplmap").style.display="none";return}
-    _pplTimer=setTimeout(()=>{
-      const eq=encodeURIComponent(q);
-      $("pplmapif").src="https://maps.google.com/maps?q="+eq+"&output=embed&hl=ja";
-      $("pplmaplink").href="https://www.google.com/maps/search/"+eq;
-      $("pplmap").style.display="block";
-    },800)};
+    _pplTimer=setTimeout(async()=>{
+      try{
+        const r=await fetch("https://nominatim.openstreetmap.org/search?format=json&q="+encodeURIComponent(q)+"&countrycodes=jp&limit=1&accept-language=ja");
+        const d=await r.json();
+        if(d&&d[0]){showMapAt(parseFloat(d[0].lat),parseFloat(d[0].lon))}
+      }catch(e){console.log("geocode err:",e)}
+    },1000)};
   $("pmap").oninput=()=>{const r=parseMap($("pmap").value);
     $("pmapst").textContent=r===""?"Googleマップで集合場所を開き、「共有」→「リンクをコピー」で取得したリンクを貼り付けます。貼らない場合は、釣り場の名前で検索するリンクになります。":r===null?"このリンクは読み取れません。Googleマップの共有リンクを貼り付けてください。":"地図のリンクを認識しました。"};
   $("pf").onsubmit=async ev=>{ev.preventDefault();
@@ -597,8 +622,10 @@ function viewPost(){
     const miss=[["pt","タイトル"],["ppl","釣り場・集合場所・集合駅"],["pd","日付"],["pog","主催者名"]].find(([i])=>!v(i));
     if(miss){$("perr").textContent=miss[1]+"を入力してください。";$(miss[0]).focus();return}
     const cap=Math.max(2,Math.min(40,parseInt(v("pcap"))||6));
-    const mp=parseMap($("pmap").value);
+    let mp=parseMap($("pmap").value);
     if(mp===null){$("perr").textContent="地図のリンクを読み取れませんでした。Googleマップの共有リンクを貼り付けてください。";$("pmap").focus();return}
+    /* ピンで位置調整されていたら、その座標をmapUrlに使う */
+    if(mp===""&&$("plat").value&&$("plng").value){mp="https://www.google.com/maps?q="+$("plat").value+","+$("plng").value}
     const e={id:"u"+Date.now().toString(36),title:v("pt"),type:v("pty"),area:v("par"),place:v("ppl"),date:v("pd"),time:v("ptm"),end:v("pen"),
       fish:v("pf2"),level:v("plv"),fee:Math.max(0,parseInt(v("pfee"))||0),cap,joined:1,org:v("pog"),rental:$("prent").checked,access:[...document.querySelectorAll('input[name="acc"]:checked')].map(i=>i.value),mapUrl:mp,
       items:v("pit")||"特になし",desc:v("pds")||"詳しくは当日お伝えします。"};
