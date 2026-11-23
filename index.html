@@ -262,7 +262,15 @@ if(_supabase) _supabase.auth.onAuthStateChange((event,session)=>{
   } else {
     currentUser=null;
   }
-  if(_authReady){updateAuthUI();route()}
+  if(_authReady){
+    updateAuthUI();
+    /* OAuth リダイレクト後: access_tokenがURLにあればマイページへ */
+    if(session && location.hash.includes("access_token=")){
+      location.hash="my";
+      return;
+    }
+    route();
+  }
 });
 
 async function logout(){
@@ -896,7 +904,13 @@ function viewSignup(){
 const $=id=>document.getElementById(id);
 const $app=$("app");
 function route(){
-  const h=location.hash.slice(1)||"landing";
+  const raw=location.hash.slice(1)||"landing";
+  /* Google OAuth リダイレクト: #access_token=... が来たらSupabaseに処理させてから再ルーティング */
+  if(raw.includes("access_token=")||raw.includes("error_description=")){
+    /* Supabaseがトークンを自動処理するのを待つ */
+    return;
+  }
+  const h=raw.split("?")[0];
   let r=h;
   if(h.startsWith("event-")){viewEvent(h.slice(6));r="home"}
   else if(h==="login"){viewLogin();r="login"}
