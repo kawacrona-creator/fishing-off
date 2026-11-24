@@ -545,7 +545,7 @@ function viewEvent(id){
       try{
         fetch("https://ltqsmfzrwqluylgzxpbt.supabase.co/functions/v1/swift-handler",{
           method:"POST",
-          headers:{"Content-Type":"application/json","Authorization":"Bearer "+_supabase.supabaseKey},
+          headers:{"Content-Type":"application/json","Authorization":"Bearer "+(await _supabase.auth.getSession()).data.session?.access_token},
           body:JSON.stringify({event_id:e.id,applicant_name:name,experience:$("ae").value,message:$("am").value.trim()})
         }).catch(err=>console.log("通知送信エラー:",err));
       }catch(ne){console.log("通知エラー:",ne)}
