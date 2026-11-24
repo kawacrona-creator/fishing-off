@@ -720,8 +720,25 @@ function viewOrganizers(){
 function viewMy(){
   if(!currentUser){location.hash="login";return}
   const all=events();
-  const applied=all.filter(e=>(S.applied[e.id]||[]).length);
-  const mine=S.posted;
+  /* DBから自分が投稿したイベント */
+  const myDbEvents=all.filter(e=>e.fromDB&&e.user_id===currentUser.id);
+  /* DBから自分が申し込んだイベント */
+  const myDbApplied=all.filter(e=>e.fromDB&&(_dbApps[e.id]||[]).some(a=>a.user_id===currentUser.id));
+  /* ローカルの申し込み（レガシー） */
+  const localApplied=all.filter(e=>!e.fromDB&&(S.applied[e.id]||[]).length);
+  /* 統合: 重複除去 */
+  const appliedMap=new Map();
+  localApplied.forEach(e=>appliedMap.set(e.id,e));
+  myDbApplied.forEach(e=>appliedMap.set(e.id,e));
+  const applied=[...appliedMap.values()];
+  /* 自分の投稿: DB + ローカル */
+  const localMine=S.posted;
+  const mineMap=new Map();
+  localMine.forEach(m=>{const e=byId(m.id);if(e)mineMap.set(e.id,e)});
+  myDbEvents.forEach(e=>mineMap.set(e.id,e));
+  const mine=[...mineMap.values()];
+  /* 申し込み総数 */
+  const totalApps=applied.length;
   const initial=(currentUser.name||currentUser.email||"?").charAt(0).toUpperCase();
   const joinedDate=currentUser.joined||"—";
   $app.innerHTML=`
@@ -738,7 +755,7 @@ function viewMy(){
       <div class="profile-stats">
         <div class="pstat"><div class="n">${applied.length}</div><div class="l">参加希望</div></div>
         <div class="pstat"><div class="n">${mine.length}</div><div class="l">主催した釣行</div></div>
-        <div class="pstat"><div class="n">${Object.values(S.applied).reduce((a,b)=>a+b.length,0)}</div><div class="l">申し込み数</div></div>
+        <div class="pstat"><div class="n">${totalApps}</div><div class="l">申し込み数</div></div>
       </div>
       <details>
         <summary style="cursor:pointer;font-size:14px;font-weight:700;color:var(--accent)">プロフィールを編集</summary>
@@ -753,10 +770,10 @@ function viewMy(){
       </details>
     </div>
   </section>
+  <div class="listhead"><h2>自分が作った募集</h2><span class="count">${mine.length}件</span></div>
+  <div class="events">${mine.length?mine.map(e=>card(e)).join(""):`<div class="empty">まだ募集を作っていません。<br><a href="#post">募集を作る</a></div>`}</div>
   <div class="listhead"><h2>参加を希望した釣行</h2><span class="count">${applied.length}件</span></div>
   <div class="events">${applied.length?applied.map(card).join(""):`<div class="empty">まだ参加を希望した釣行はありません。<br><a href="#home">釣行を探す</a></div>`}</div>
-  <div class="listhead"><h2>自分が作った募集</h2><span class="count">${mine.length}件</span></div>
-  <div class="events">${mine.length?mine.map(m=>card(byId(m.id))).join(""):`<div class="empty">まだ募集を作っていません。<br><a href="#post">募集を作る</a></div>`}</div>
   <div style="margin-top:28px;display:flex;gap:12px;flex-wrap:wrap">
     <button class="btn danger" id="clr" type="button">保存したデータを消す</button>
     <button class="btn ghost" id="logout-my" type="button">ログアウト</button>
