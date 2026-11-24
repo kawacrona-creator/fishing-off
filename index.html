@@ -541,6 +541,14 @@ function viewEvent(id){
       const row={event_id:e.id,user_id:currentUser?currentUser.id:null,name:name,experience:$("ae").value,message:$("am").value.trim()};
       const {error}=await _supabase.from("applications").insert(row);
       if(error){console.error("申込エラー:",error);$("aerr").textContent="保存に失敗しました: "+error.message;return}
+      /* 主催者に通知メールを送信（非同期・失敗してもOK） */
+      try{
+        fetch("https://ltqsmfzrwqluylgzxpbt.supabase.co/functions/v1/notify-organizer",{
+          method:"POST",
+          headers:{"Content-Type":"application/json","Authorization":"Bearer "+_supabase.supabaseKey},
+          body:JSON.stringify({event_id:e.id,applicant_name:name,experience:$("ae").value,message:$("am").value.trim()})
+        }).catch(err=>console.log("通知送信エラー:",err));
+      }catch(ne){console.log("通知エラー:",ne)}
       await loadAllData();
     } else {
       (S.applied[e.id]=S.applied[e.id]||[]).push({name,exp:$("ae").value,msg:$("am").value.trim(),at:Date.now()});
