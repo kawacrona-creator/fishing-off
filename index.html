@@ -543,7 +543,7 @@ function viewEvent(id){
       if(error){console.error("申込エラー:",error);$("aerr").textContent="保存に失敗しました: "+error.message;return}
       /* 主催者に通知メールを送信（非同期・失敗してもOK） */
       try{
-        fetch("https://ltqsmfzrwqluylgzxpbt.supabase.co/functions/v1/notify-organizer",{
+        fetch("https://ltqsmfzrwqluylgzxpbt.supabase.co/functions/v1/swift-handler",{
           method:"POST",
           headers:{"Content-Type":"application/json","Authorization":"Bearer "+_supabase.supabaseKey},
           body:JSON.stringify({event_id:e.id,applicant_name:name,experience:$("ae").value,message:$("am").value.trim()})
