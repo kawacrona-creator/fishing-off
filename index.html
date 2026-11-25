@@ -782,6 +782,17 @@ function viewMy(){
   <div class="events">${mine.length?mine.map(e=>card(e)).join(""):`<div class="empty">まだ募集を作っていません。<br><a href="#post">募集を作る</a></div>`}</div>
   <div class="listhead"><h2>参加を希望した釣行</h2><span class="count">${applied.length}件</span></div>
   <div class="events">${applied.length?applied.map(card).join(""):`<div class="empty">まだ参加を希望した釣行はありません。<br><a href="#home">釣行を探す</a></div>`}</div>
+  <section class="panel" style="margin-top:28px;border:2px solid var(--accent);border-radius:16px;padding:24px">
+    <h2 style="font-size:20px;font-weight:900;margin-bottom:8px">🎣 主催者プラン</h2>
+    <p style="line-height:1.7;margin:0 0 12px">月額 <b style="font-size:24px;color:var(--accent)">¥980</b> で釣行イベントの投稿が無制限に！</p>
+    <ul style="line-height:1.9;padding-left:1.2em;margin:0 0 16px">
+      <li>募集の作成・編集が無制限</li>
+      <li>参加者管理ツールが使える</li>
+      <li>主催者バッジが表示される</li>
+    </ul>
+    <button class="btn" id="stripe-checkout" type="button" style="font-size:16px;padding:12px 32px">主催者プランに申し込む</button>
+    <span id="stripe-msg" style="display:block;margin-top:8px;font-size:13px"></span>
+  </section>
   <div style="margin-top:28px;display:flex;gap:12px;flex-wrap:wrap">
     <button class="btn danger" id="clr" type="button">保存したデータを消す</button>
     <button class="btn ghost" id="logout-my" type="button">ログアウト</button>
@@ -799,6 +810,29 @@ function viewMy(){
     updateAuthUI();
     $("save-msg").innerHTML=`<span style="color:var(--ok)">保存しました</span>`;
     setTimeout(()=>{if($("save-msg"))$("save-msg").textContent=""},2000);
+  };
+  /* Stripe決済後のメッセージ */
+  const hashFull=location.hash.slice(1);
+  if(hashFull.includes("payment=success")){
+    $("stripe-msg").innerHTML=`<span style="color:var(--ok);font-weight:700">✅ 決済が完了しました！主催者プランが有効になりました。</span>`;
+    $("stripe-checkout").textContent="プラン登録済み";$("stripe-checkout").disabled=true;
+    history.replaceState(null,"","#my");
+  }else if(hashFull.includes("payment=cancel")){
+    $("stripe-msg").innerHTML=`<span style="color:var(--warn)">決済がキャンセルされました。</span>`;
+    history.replaceState(null,"","#my");
+  }
+  $("stripe-checkout").onclick=async()=>{
+    const btn=$("stripe-checkout");const msg=$("stripe-msg");
+    btn.disabled=true;btn.textContent="処理中…";msg.textContent="";
+    try{
+      const res=await fetch("https://ltqsmfzrwqluylgzxpbt.supabase.co/functions/v1/checkout",{
+        method:"POST",headers:{"Content-Type":"application/json","apikey":_supabase.supabaseKey},
+        body:JSON.stringify({user_id:currentUser.id,email:currentUser.email})
+      });
+      const data=await res.json();
+      if(!res.ok||!data.url){msg.textContent="エラー: "+(data.error||"決済ページを開けませんでした");btn.disabled=false;btn.textContent="主催者プランに申し込む";return}
+      window.location.href=data.url;
+    }catch(e){msg.textContent="通信エラーが発生しました。";btn.disabled=false;btn.textContent="主催者プランに申し込む";}
   };
   $("logout-my").onclick=()=>logout();
   let armed=false;
