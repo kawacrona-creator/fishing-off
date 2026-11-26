@@ -362,6 +362,27 @@ async function loadBlocks(){
   }catch(e){console.error("blocks取得例外:",e)}
 }
 function isBlocked(organizer_id,user_id){return (_allBlocks[organizer_id]||[]).includes(user_id)}
+
+/* メッセージ関連 */
+async function loadEventMessages(eventId){
+  if(!_supabase)return[];
+  try{
+    const {data,error}=await _supabase.from("messages").select("*").eq("event_id",eventId).order("created_at",{ascending:true});
+    if(error){console.error("msg取得エラー:",error);return[]}
+    return data||[];
+  }catch(e){return[]}
+}
+async function loadDMs(){
+  if(!_supabase||!currentUser)return[];
+  try{
+    const {data,error}=await _supabase.from("messages").select("*").is("event_id",null)
+      .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
+      .order("created_at",{ascending:true});
+    if(error){console.error("DM取得エラー:",error);return[]}
+    return data||[];
+  }catch(e){return[]}
+}
+function msgTime(ts){const d=new Date(ts);return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`}
 async function loadAllData(){await Promise.all([loadEvents(),loadApplications(),loadBlocks()])}
 /* localStorage fallback for offline / sample data */
 const KEY="fishing-off-v1";
@@ -535,7 +556,7 @@ function viewEvent(id){
       <a class="btn" style="margin-top:12px" href="${esc(mapLink(e))}" target="_blank" rel="noopener noreferrer">地図を開く</a>
     </section>
     <section class="panel"><h2>詳細情報</h2><p style="margin:0 0 14px;white-space:pre-wrap">${esc(e.desc)}</p>
-      <div class="org"><div class="avatar" aria-hidden="true">${esc([...e.org][0])}</div><div><b>${esc(e.org)}</b><div class="note">主催者</div></div></div>
+      <div class="org"><div class="avatar" aria-hidden="true">${esc([...e.org][0])}</div><div><b>${esc(e.org)}</b><div class="note">主催者</div></div>${(currentUser&&e.fromDB&&e.user_id!==currentUser.id)?`<a href="#dm-${e.user_id}" class="btn ghost" style="font-size:12px;padding:4px 12px;margin-left:auto">💬 DMを送る</a>`:""}</div>
     </section>
     <section class="panel ${mine.length?"ok":""}" id="apply">
       ${mine.length?`<h2>参加希望を保存しました</h2><p style="margin:0">${esc(mine[mine.length-1].name)}さんの参加希望をこのブラウザに保存しました。試作版のため、主催者への通知は行われません。</p>`
@@ -561,6 +582,17 @@ function viewEvent(id){
             ${a.user_id?`<button class="btn ${blocked?"ghost":"danger"}" style="font-size:12px;padding:4px 12px" data-block-uid="${a.user_id}" data-block-name="${esc(a.name)}">${blocked?"ブロック解除":"ブロック"}</button>`:""}
           </div>`}).join("")}</div>`:`<p class="note" style="margin:0">まだ申し込みはありません。</p>`}
       </section>`})():""}
+    ${(currentUser&&e.fromDB)?(()=>{
+      const isOrg=e.user_id===currentUser.id;
+      const hasApplied=(_dbApps[e.id]||[]).some(a=>a.user_id===currentUser.id);
+      return (isOrg||hasApplied)?`<section class="panel" id="msg-section">
+        <h2>💬 メッセージ</h2>
+        <div id="msg-list" style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:12px"><p class="note">読み込み中…</p></div>
+        <form id="msg-form" style="display:flex;gap:8px">
+          <input id="msg-input" style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px" placeholder="メッセージを入力…" maxlength="500">
+          <button class="btn" type="submit" style="padding:8px 16px;white-space:nowrap">送信</button>
+        </form>
+      </section>`:""})():""}
   </div>`;
   /* ブロック/解除ボタン */
   document.querySelectorAll("[data-block-uid]").forEach(btn=>{
@@ -579,6 +611,45 @@ function viewEvent(id){
       viewEvent(id);
     };
   });
+  /* イベントメッセージ読み込み・送信 */
+  if($("msg-section")&&_supabase){
+    (async()=>{
+      const msgs=await loadEventMessages(e.id);
+      const ml=$("msg-list");
+      if(!msgs.length){ml.innerHTML=`<p class="note">まだメッセージはありません。最初のメッセージを送りましょう！</p>`}
+      else{ml.innerHTML=msgs.map(m=>{
+        const isMine=m.sender_id===currentUser.id;
+        const isOrg=m.sender_id===e.user_id;
+        const label=isOrg?"主催者":"参加者";
+        return `<div style="display:flex;flex-direction:column;${isMine?"align-items:flex-end":"align-items:flex-start"}">
+          <div style="background:${isMine?"var(--accent)":"var(--card)"};color:${isMine?"#fff":"inherit"};padding:8px 14px;border-radius:${isMine?"14px 14px 4px 14px":"14px 14px 14px 4px"};max-width:80%;word-break:break-word;border:${isMine?"none":"1px solid var(--border)"}">
+            <div style="font-size:11px;opacity:0.7;margin-bottom:2px">${esc(label)} · ${msgTime(m.created_at)}</div>
+            ${esc(m.message)}
+          </div>
+        </div>`}).join("");ml.scrollTop=ml.scrollHeight}
+    })();
+    $("msg-form").onsubmit=async ev=>{
+      ev.preventDefault();
+      const txt=$("msg-input").value.trim();if(!txt)return;
+      const receiver_id=e.user_id===currentUser.id?null:e.user_id;
+      const {error}=await _supabase.from("messages").insert({sender_id:currentUser.id,receiver_id:receiver_id||e.user_id,event_id:e.id,message:txt});
+      if(error){alert("送信に失敗しました");return}
+      $("msg-input").value="";
+      const msgs=await loadEventMessages(e.id);
+      const ml=$("msg-list");
+      ml.innerHTML=msgs.map(m=>{
+        const isMine=m.sender_id===currentUser.id;
+        const isOrg=m.sender_id===e.user_id;
+        const label=isOrg?"主催者":"参加者";
+        return `<div style="display:flex;flex-direction:column;${isMine?"align-items:flex-end":"align-items:flex-start"}">
+          <div style="background:${isMine?"var(--accent)":"var(--card)"};color:${isMine?"#fff":"inherit"};padding:8px 14px;border-radius:${isMine?"14px 14px 4px 14px":"14px 14px 14px 4px"};max-width:80%;word-break:break-word;border:${isMine?"none":"1px solid var(--border)"}">
+            <div style="font-size:11px;opacity:0.7;margin-bottom:2px">${esc(label)} · ${msgTime(m.created_at)}</div>
+            ${esc(m.message)}
+          </div>
+        </div>`}).join("");
+      ml.scrollTop=ml.scrollHeight;
+    };
+  }
   const f=$("af");
   if(f)f.onsubmit=async ev=>{ev.preventDefault();
     const name=$("an").value.trim();
@@ -825,6 +896,7 @@ function viewMy(){
       </details>
     </div>
   </section>
+  <div style="margin-top:16px"><a href="#dm" class="btn ghost" style="font-size:14px;padding:10px 20px;width:100%;text-align:center;display:block">💬 ダイレクトメッセージを見る</a></div>
   <div class="listhead"><h2>自分が作った募集</h2><span class="count">${mine.length}件</span></div>
   <div class="events">${mine.length?mine.map(e=>card(e)).join(""):`<div class="empty">まだ募集を作っていません。<br><a href="#post">募集を作る</a></div>`}</div>
   <div class="listhead"><h2>参加を希望した釣行</h2><span class="count">${applied.length}件</span></div>
@@ -886,6 +958,86 @@ function viewMy(){
   $("clr").onclick=()=>{
     if(!armed){armed=true;$("clr").textContent="もう一度押すと、申し込みと募集をすべて消します";return}
     S={posted:[],applied:{}};save();viewMy()};
+}
+
+/* ---------- DM（ダイレクトメッセージ）---------- */
+async function viewDM(h){
+  if(!currentUser){location.hash="login";return}
+  const partnerId=h.includes("-")?h.split("-").slice(1).join("-"):null;
+  const allMsgs=await loadDMs();
+
+  if(partnerId){
+    /* 個別チャット画面 */
+    const chat=allMsgs.filter(m=>(m.sender_id===partnerId&&m.receiver_id===currentUser.id)||(m.sender_id===currentUser.id&&m.receiver_id===partnerId));
+    /* 相手の名前を取得（メッセージがあれば最新の送信者情報から） */
+    let partnerName=partnerId.slice(0,8)+"…";
+    /* イベント申し込みデータから名前を探す */
+    for(const eid in _dbApps){(_dbApps[eid]||[]).forEach(a=>{if(a.user_id===partnerId)partnerName=a.name})}
+    $app.innerHTML=`
+    <a class="back" href="#dm">&larr; メッセージ一覧に戻る</a>
+    <section style="padding-top:12px">
+      <h1 style="font-size:20px;margin-bottom:16px">${esc(partnerName)} とのメッセージ</h1>
+      <div id="dm-list" style="max-height:400px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:12px;padding:8px;border:1px solid var(--border);border-radius:12px">
+        ${chat.length?chat.map(m=>{
+          const isMine=m.sender_id===currentUser.id;
+          return `<div style="display:flex;flex-direction:column;${isMine?"align-items:flex-end":"align-items:flex-start"}">
+            <div style="background:${isMine?"var(--accent)":"var(--card)"};color:${isMine?"#fff":"inherit"};padding:8px 14px;border-radius:${isMine?"14px 14px 4px 14px":"14px 14px 14px 4px"};max-width:80%;word-break:break-word;border:${isMine?"none":"1px solid var(--border)"}">
+              <div style="font-size:11px;opacity:0.7;margin-bottom:2px">${msgTime(m.created_at)}</div>
+              ${esc(m.message)}
+            </div>
+          </div>`}).join(""):`<p class="note" style="text-align:center">メッセージを送ってみましょう！</p>`}
+      </div>
+      <form id="dm-form" style="display:flex;gap:8px">
+        <input id="dm-input" style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px" placeholder="メッセージを入力…" maxlength="500">
+        <button class="btn" type="submit" style="padding:8px 16px;white-space:nowrap">送信</button>
+      </form>
+    </section>`;
+    const dl=$("dm-list");if(dl)dl.scrollTop=dl.scrollHeight;
+    $("dm-form").onsubmit=async ev=>{
+      ev.preventDefault();
+      const txt=$("dm-input").value.trim();if(!txt)return;
+      const {error}=await _supabase.from("messages").insert({sender_id:currentUser.id,receiver_id:partnerId,event_id:null,message:txt});
+      if(error){alert("送信に失敗しました");return}
+      $("dm-input").value="";
+      viewDM(h);
+    };
+    /* 未読を既読にする */
+    chat.filter(m=>m.receiver_id===currentUser.id&&!m.is_read).forEach(m=>{
+      _supabase.from("messages").update({is_read:true}).eq("id",m.id).then(()=>{});
+    });
+  } else {
+    /* DM一覧画面 */
+    const partners={};
+    allMsgs.forEach(m=>{
+      const pid=m.sender_id===currentUser.id?m.receiver_id:m.sender_id;
+      if(!partners[pid])partners[pid]={lastMsg:m,unread:0,name:""};
+      if(new Date(m.created_at)>new Date(partners[pid].lastMsg.created_at))partners[pid].lastMsg=m;
+      if(m.receiver_id===currentUser.id&&!m.is_read)partners[pid].unread++;
+    });
+    /* 名前を申し込みデータから取得 */
+    for(const pid in partners){
+      for(const eid in _dbApps){(_dbApps[eid]||[]).forEach(a=>{if(a.user_id===pid)partners[pid].name=a.name})}
+      if(!partners[pid].name)partners[pid].name=pid.slice(0,8)+"…";
+    }
+    const sorted=Object.entries(partners).sort((a,b)=>new Date(b[1].lastMsg.created_at)-new Date(a[1].lastMsg.created_at));
+    $app.innerHTML=`
+    <a class="back" href="#my">&larr; マイページに戻る</a>
+    <section style="padding-top:12px">
+      <h1 style="font-size:22px;margin-bottom:16px">💬 ダイレクトメッセージ</h1>
+      ${sorted.length?`<div style="display:flex;flex-direction:column;gap:8px">${sorted.map(([pid,p])=>{
+        return `<a href="#dm-${pid}" style="display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--border);border-radius:12px;text-decoration:none;color:inherit">
+          <div class="profile-avatar" style="width:40px;height:40px;font-size:16px;flex-shrink:0">${esc([...p.name][0].toUpperCase())}</div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <b>${esc(p.name)}</b>
+              <span style="font-size:11px;color:var(--muted)">${msgTime(p.lastMsg.created_at)}</span>
+            </div>
+            <div style="font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.lastMsg.message)}</div>
+          </div>
+          ${p.unread?`<span style="background:var(--accent);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${p.unread}</span>`:""}
+        </a>`}).join("")}</div>`:`<p class="note">まだダイレクトメッセージはありません。<br>イベントページで相手のプロフィールから「メッセージを送る」ことができます。</p>`}
+    </section>`;
+  }
 }
 
 /* ---------- login / signup（会員機能）---------- */
@@ -1074,6 +1226,7 @@ function route(){
   else if(h==="privacy")viewPrivacy();
   else if(h==="reset-pw")viewResetPw();
   else if(h==="my")viewMy();
+  else if(h.startsWith("dm"))viewDM(h);
   else if(h==="home"){viewHome();r="home"}
   else if(h==="landing"){viewLanding();r="landing"}
   else{viewLanding();r="landing"}
