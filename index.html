@@ -600,8 +600,22 @@ function viewEvent(id){
     </section>
     <section class="panel"><h2>詳細情報</h2><p style="margin:0 0 14px;white-space:pre-wrap">${esc(e.desc)}</p>
       <div class="org"><div class="avatar" aria-hidden="true">${esc([...e.org][0])}</div><div><b>${esc(e.org)}</b><div class="note">主催者</div></div></div>
-      ${(e.fromDB&&e.user_id)?`<a href="${currentUser?`#dm-${e.user_id}`:"#login"}" class="btn" style="margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px;width:100%">💬 主催者にメッセージを送る</a>`:""}
     </section>
+    ${(e.fromDB&&e.user_id)?`<section class="panel" id="contact-org">
+      <h2>💬 主催者にメッセージを送る</h2>
+      <p class="note" style="margin:0 0 12px">会員登録なしで主催者に直接メッセージを送れます。</p>
+      <form class="form" id="contact-form" novalidate>
+        <label class="f" for="contact-name">お名前（ニックネーム可）<input id="contact-name" maxlength="30" placeholder="例: たろう" required></label>
+        <label class="f" for="contact-msg">メッセージ<textarea id="contact-msg" maxlength="500" rows="3" placeholder="例: 初心者ですが参加できますか？持ち物について教えてください。" required></textarea></label>
+        <div class="err" id="contact-err" role="alert"></div>
+        <button class="btn" type="submit" id="contact-btn" style="width:100%">メッセージを送信する</button>
+      </form>
+      <div id="contact-ok" style="display:none;text-align:center;padding:16px 0">
+        <div style="font-size:28px;margin-bottom:8px">✅</div>
+        <b>メッセージを送信しました！</b>
+        <p class="note" style="margin:8px 0 0">主催者からの返信をお待ちください。</p>
+      </div>
+    </section>`:""}`}
     <section class="panel ${mine.length?"ok":""}" id="apply">
       ${mine.length?`<h2>参加希望を保存しました</h2><p style="margin:0">${esc(mine[mine.length-1].name)}さんの参加希望をこのブラウザに保存しました。試作版のため、主催者への通知は行われません。</p>`
       :(currentUser&&e.user_id&&isBlocked(e.user_id,currentUser.id))?`<h2>参加を希望する</h2><p style="margin:0;color:var(--warn)">この主催者の釣行には申し込みできません。</p>`
@@ -720,6 +734,28 @@ function viewEvent(id){
       save();
     }
     viewEvent(id);window.scrollTo({top:0})};
+  /* 閲覧者→主催者 お問い合わせフォーム */
+  const cf=$("contact-form");
+  if(cf)cf.onsubmit=async ev=>{
+    ev.preventDefault();
+    const name=$("contact-name").value.trim();
+    const msg=$("contact-msg").value.trim();
+    const errEl=$("contact-err");
+    if(!name){errEl.textContent="お名前を入力してください。";$("contact-name").focus();return}
+    if(!msg){errEl.textContent="メッセージを入力してください。";$("contact-msg").focus();return}
+    errEl.textContent="";
+    const btn=$("contact-btn");btn.disabled=true;btn.textContent="送信中…";
+    try{
+      const fullMsg="【問い合わせ】"+name+"さんより:\n"+msg;
+      const row={sender_id:currentUser?currentUser.id:null,receiver_id:e.user_id,event_id:e.id,message:fullMsg};
+      const {error}=await sbInsert('messages',row);
+      if(error){errEl.textContent="送信に失敗しました: "+(error.message||"");btn.disabled=false;btn.textContent="メッセージを送信する";return}
+      cf.style.display="none";
+      $("contact-ok").style.display="block";
+    }catch(ex){
+      errEl.textContent="送信エラーが発生しました。";btn.disabled=false;btn.textContent="メッセージを送信する";
+    }
+  };
 }
 
 var _pplTimer=null,_pplMap=null,_pplMarker=null;
