@@ -893,8 +893,8 @@ function viewOrganizers(){
       <ul><li>釣行の検索と閲覧</li><li>参加の申し込み</li><li>参加費は当日、主催者へ現地払い</li></ul></div>
     <div class="plan pro"><h2>主催者プラン</h2><div class="price">¥980<small> / 月</small></div>
       <ul><li>釣行の募集ページを作成(回数は無制限)</li><li>参加希望の受付と定員管理</li><li>初心者歓迎などのレベル表示</li></ul>
-      <a class="btn" href="#post">募集を作ってみる</a>
-      <div class="note">決済は試作版では動きません。</div></div>
+      <button class="btn" id="org-plan-btn" type="button" style="width:100%;font-size:16px;padding:12px">主催者プランに申し込む</button>
+      <span id="org-plan-msg" style="display:block;margin-top:8px;font-size:13px"></span></div>
   </div>
   <section class="panel" style="margin-top:16px"><h2>募集から釣行までの流れ</h2>
     <ol class="flow"><li><div><b>募集を作る</b><br><span class="note">日時、釣り場、対象魚、参加費、定員を入力します。</span></div></li>
@@ -924,6 +924,20 @@ function viewOrganizers(){
     </ul>
     <p style="line-height:1.8;margin:0;padding:12px 14px;background:var(--accent-soft);border-radius:8px;font-size:14px">ルールとマナーを守り、みんなが楽しめる釣りの場を一緒に作っていきましょう。ご協力をお願いいたします。</p>
   </section>`;
+  $("org-plan-btn").onclick=async()=>{
+    if(!currentUser){location.hash="login";return}
+    const btn=$("org-plan-btn");const msg=$("org-plan-msg");
+    btn.disabled=true;btn.textContent="処理中…";msg.textContent="";
+    try{
+      const res=await fetch(SB_URL+"/functions/v1/checkout",{
+        method:"POST",headers:{"Content-Type":"application/json","apikey":SB_KEY},
+        body:JSON.stringify({user_id:currentUser.id,email:currentUser.email})
+      });
+      const data=await res.json();
+      if(!res.ok||!data.url){msg.textContent="エラー: "+(data.error||"決済ページを開けませんでした");btn.disabled=false;btn.textContent="主催者プランに申し込む";return}
+      window.location.href=data.url;
+    }catch(e){msg.textContent="通信エラーが発生しました。";btn.disabled=false;btn.textContent="主催者プランに申し込む";}
+  };
 }
 
 function viewMy(){
