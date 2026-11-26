@@ -327,6 +327,7 @@ async function loadEvents(){
   if(!_supabase)return;
   try{
     const {data,error}=await _supabase.from("events").select("*").order("date",{ascending:true});
+    console.log("events取得結果: data=",data,"error=",error);
     if(error){console.error("events取得エラー:",error);return}
     _dbEvents=(data||[]).map(r=>({
       id:r.id, user_id:r.user_id, title:r.title, type:r.type, area:r.area, place:r.place,
