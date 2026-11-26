@@ -328,7 +328,9 @@ let _allBlocks={}; // organizer_id -> [blocked_user_id]
 async function loadEvents(){
   if(!_supabase)return;
   try{
+    console.log("loadEvents: クエリ開始");
     const {data,error}=await _supabase.from("events").select("*").order("date",{ascending:true});
+    console.log("loadEvents: data=",JSON.stringify(data?.length),"件, error=",error);
     if(error){console.error("events取得エラー:",error);return}
     _dbEvents=(data||[]).map(r=>({
       id:r.id, user_id:r.user_id, title:r.title, type:r.type, area:r.area, place:r.place,
@@ -785,7 +787,9 @@ function viewPost(){
       const row={user_id:currentUser.id,title:e.title,type:e.type,area:e.area,place:e.place,
         map_url:e.mapUrl,date:e.date,time:e.time,end_time:e.end,fish:e.fish,level:e.level,
         fee:e.fee,cap:e.cap,org:e.org,rental:e.rental,access:e.access,items:e.items,description:e.desc};
+      console.log("投稿: insert開始, currentUser=",currentUser?.id);
       const {data,error}=await _supabase.from("events").insert(row).select().single();
+      console.log("投稿結果: data=",data,"error=",error);
       if(error){console.error("投稿エラー:",error);$("perr").textContent="保存に失敗しました: "+error.message;return}
       await loadAllData();
       location.hash="event-"+data.id;
