@@ -105,8 +105,11 @@ textarea{resize:vertical;min-height:96px}
 .listhead h2{font-size:19px}
 .count{color:var(--muted);font-size:13px}
 .events{display:grid;gap:12px}
+.card-wrap{position:relative}
 .card{display:grid;grid-template-columns:64px minmax(0,1fr);gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;text-decoration:none;color:inherit}
 .card:hover{border-color:var(--accent)}
+.card-dm{position:absolute;bottom:10px;right:10px;font-size:18px;text-decoration:none;background:var(--accent);color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.15);transition:transform .15s}
+.card-dm:hover{transform:scale(1.12)}
 .date{border-radius:8px;background:var(--accent-soft);text-align:center;padding:8px 0;height:max-content;font-variant-numeric:tabular-nums}
 .date .m{font-size:11px;font-weight:700;color:var(--muted)}
 .date .d{font-family:var(--font-display);font-size:26px;font-weight:900;line-height:1.1}
@@ -454,13 +457,14 @@ function dateBlock(e){const d=pd(e.date),w=d.getDay();
 function spotsHtml(e){const left=e.cap-e.joined;
   return `<div class="spots"><span>${left>0?`残り<b>${left}</b>名`:`<b class="full">満員</b>`}</span><span class="bar"><i style="width:${Math.min(100,e.joined/e.cap*100)}%"></i></span><span>${e.joined}/${e.cap}名</span></div>`}
 function card(e){
-  return `<a class="card" href="#event-${esc(e.id)}">${dateBlock(e)}<div style="min-width:0">
+  const showDm=e.fromDB&&e.user_id&&(!currentUser||e.user_id!==currentUser.id);
+  return `<div class="card-wrap"><a class="card" href="#event-${esc(e.id)}">${dateBlock(e)}<div style="min-width:0">
     <div class="badges"><span class="badge">${esc(e.type)}</span><span class="badge lv">${esc(e.level)}</span>${e.id[0]==="s"?'<span class="sample">サンプル</span>':""}</div>
     <h3>${esc(e.title)}</h3>
     <div class="meta"><span>${esc(e.time)}集合</span><span>${esc(e.area?e.area+" / ":"")}${esc(e.place)}</span></div>
     <div class="meta"><span>対象: ${esc(e.fish||"指定なし")}</span><span>参加費 ${yen(e.fee)}</span></div>
     <div class="meta"><span>集合手段: ${e.access.length?e.access.map(esc).join("・"):"指定なし"}</span></div>
-    ${spotsHtml(e)}</div></a>`}
+    ${spotsHtml(e)}</div></a>${showDm?`<a href="${currentUser?`#dm-${e.user_id}`:"#login"}" class="card-dm" title="主催者にメッセージを送る">💬</a>`:""}</div>`}
 
 /* ---------- views ---------- */
 
@@ -595,7 +599,7 @@ function viewEvent(id){
       <a class="btn" style="margin-top:12px" href="${esc(mapLink(e))}" target="_blank" rel="noopener noreferrer">地図を開く</a>
     </section>
     <section class="panel"><h2>詳細情報</h2><p style="margin:0 0 14px;white-space:pre-wrap">${esc(e.desc)}</p>
-      <div class="org"><div class="avatar" aria-hidden="true">${esc([...e.org][0])}</div><div><b>${esc(e.org)}</b><div class="note">主催者</div></div>${(currentUser&&e.fromDB&&e.user_id!==currentUser.id)?`<a href="#dm-${e.user_id}" class="btn ghost" style="font-size:12px;padding:4px 12px;margin-left:auto">💬 DMを送る</a>`:""}</div>
+      <div class="org"><div class="avatar" aria-hidden="true">${esc([...e.org][0])}</div><div><b>${esc(e.org)}</b><div class="note">主催者</div></div>${(e.fromDB&&e.user_id&&(!currentUser||e.user_id!==currentUser.id))?`<a href="${currentUser?`#dm-${e.user_id}`:"#login"}" class="btn ghost" style="font-size:12px;padding:4px 12px;margin-left:auto">💬 主催者にメッセージ</a>`:""}</div>
     </section>
     <section class="panel ${mine.length?"ok":""}" id="apply">
       ${mine.length?`<h2>参加希望を保存しました</h2><p style="margin:0">${esc(mine[mine.length-1].name)}さんの参加希望をこのブラウザに保存しました。試作版のため、主催者への通知は行われません。</p>`
