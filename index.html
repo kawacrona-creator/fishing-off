@@ -600,7 +600,7 @@ function viewEvent(id){
     </section>
     <section class="panel"><h2>詳細情報</h2><p style="margin:0 0 14px;white-space:pre-wrap">${esc(e.desc)}</p>
       <div class="org"><div class="avatar" aria-hidden="true">${esc([...e.org][0])}</div><div><b>${esc(e.org)}</b><div class="note">主催者</div></div></div>
-      ${(e.fromDB&&e.user_id&&(!currentUser||e.user_id!==currentUser.id))?`<a href="${currentUser?`#dm-${e.user_id}`:"#login"}" class="btn" style="margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px;width:100%">💬 主催者にメッセージを送る</a>`:""}
+      ${(e.fromDB&&e.user_id)?`<a href="${currentUser?`#dm-${e.user_id}`:"#login"}" class="btn" style="margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px;width:100%">💬 主催者にメッセージを送る</a>`:""}
     </section>
     <section class="panel ${mine.length?"ok":""}" id="apply">
       ${mine.length?`<h2>参加希望を保存しました</h2><p style="margin:0">${esc(mine[mine.length-1].name)}さんの参加希望をこのブラウザに保存しました。試作版のため、主催者への通知は行われません。</p>`
