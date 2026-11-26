@@ -228,17 +228,14 @@ try{
     'sb_publishable_44qx2s3Nmbg2H-g-F8xotQ_kx7xTuBg'
   );
 }catch(e){console.error("Supabase初期化エラー:",e)}
-console.log("DEBUG: _supabase=",_supabase?"OK":"NULL");
 
 /* セッション復元 */
 async function initAuth(){
-  console.log("DEBUG: initAuth開始, _supabase=",!!_supabase);
   if(!_supabase){_authReady=true;updateAuthUI();route();return}
   try{
     const sessionPromise=_supabase.auth.getSession();
     const timeout=new Promise(r=>setTimeout(()=>r({data:{session:null}}),5000));
     const {data:{session}}=await Promise.race([sessionPromise,timeout]);
-    console.log("DEBUG: getSession完了, session=",!!session);
     if(session){
       const u=session.user;
       currentUser={
@@ -329,11 +326,9 @@ let _dbApps={};    // event_id -> [{name,experience,message}]
 let _dbBlocks=[];  // 自分がブロックしたユーザーID一覧
 let _allBlocks={}; // organizer_id -> [blocked_user_id]
 async function loadEvents(){
-  console.log("DEBUG: loadEvents開始, _supabase=",!!_supabase);
   if(!_supabase)return;
   try{
     const {data,error}=await _supabase.from("events").select("*").order("date",{ascending:true});
-    console.log("events取得結果: data=",data,"error=",error);
     if(error){console.error("events取得エラー:",error);return}
     _dbEvents=(data||[]).map(r=>({
       id:r.id, user_id:r.user_id, title:r.title, type:r.type, area:r.area, place:r.place,
