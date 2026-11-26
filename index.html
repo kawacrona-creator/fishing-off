@@ -235,7 +235,10 @@ async function initAuth(){
   console.log("DEBUG: initAuth開始, _supabase=",!!_supabase);
   if(!_supabase){_authReady=true;updateAuthUI();route();return}
   try{
-    const {data:{session}}=await _supabase.auth.getSession();
+    const sessionPromise=_supabase.auth.getSession();
+    const timeout=new Promise(r=>setTimeout(()=>r({data:{session:null}}),5000));
+    const {data:{session}}=await Promise.race([sessionPromise,timeout]);
+    console.log("DEBUG: getSession完了, session=",!!session);
     if(session){
       const u=session.user;
       currentUser={
