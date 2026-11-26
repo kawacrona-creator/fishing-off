@@ -579,7 +579,10 @@ function viewEvent(id){
           const blocked=_dbBlocks.includes(a.user_id);
           return `<div style="border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
             <div><b>${esc(a.name)}</b> <span class="note">(${esc(a.exp)})</span>${a.msg?`<div style="font-size:13px;margin-top:4px;color:var(--muted)">${esc(a.msg)}</div>`:""}</div>
-            ${a.user_id?`<button class="btn ${blocked?"ghost":"danger"}" style="font-size:12px;padding:4px 12px" data-block-uid="${a.user_id}" data-block-name="${esc(a.name)}">${blocked?"ブロック解除":"ブロック"}</button>`:""}
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              ${a.user_id?`<a href="#dm-${a.user_id}" class="btn ghost" style="font-size:12px;padding:4px 12px">💬 DMを送る</a>`:""}
+              ${a.user_id?`<button class="btn ${blocked?"ghost":"danger"}" style="font-size:12px;padding:4px 12px" data-block-uid="${a.user_id}" data-block-name="${esc(a.name)}">${blocked?"ブロック解除":"ブロック"}</button>`:""}
+            </div>
           </div>`}).join("")}</div>`:`<p class="note" style="margin:0">まだ申し込みはありません。</p>`}
       </section>`})():""}
     ${(currentUser&&e.fromDB)?(()=>{
