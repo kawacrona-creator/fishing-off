@@ -232,17 +232,19 @@ try{
 /* セッション復元 */
 async function initAuth(){
   if(!_supabase){_authReady=true;updateAuthUI();route();return}
-  const {data:{session}}=await _supabase.auth.getSession();
-  if(session){
-    const u=session.user;
-    currentUser={
-      id:u.id,
-      email:u.email,
-      name:u.user_metadata?.name||u.email.split("@")[0],
-      joined:(u.created_at||"").slice(0,10),
-      bio:u.user_metadata?.bio||""
-    };
-  }
+  try{
+    const {data:{session}}=await _supabase.auth.getSession();
+    if(session){
+      const u=session.user;
+      currentUser={
+        id:u.id,
+        email:u.email,
+        name:u.user_metadata?.name||u.email.split("@")[0],
+        joined:(u.created_at||"").slice(0,10),
+        bio:u.user_metadata?.bio||""
+      };
+    }
+  }catch(e){console.error("セッション取得エラー:",e)}
   try{await loadAllData();}catch(e){console.error("データ読み込みエラー:",e)}
   _authReady=true;
   updateAuthUI();
