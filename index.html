@@ -615,7 +615,7 @@ function viewEvent(id){
         <b>メッセージを送信しました！</b>
         <p class="note" style="margin:8px 0 0">主催者からの返信をお待ちください。</p>
       </div>
-    </section>`:""}`}
+    </section>`:""}
     <section class="panel ${mine.length?"ok":""}" id="apply">
       ${mine.length?`<h2>参加希望を保存しました</h2><p style="margin:0">${esc(mine[mine.length-1].name)}さんの参加希望をこのブラウザに保存しました。試作版のため、主催者への通知は行われません。</p>`
       :(currentUser&&e.user_id&&isBlocked(e.user_id,currentUser.id))?`<h2>参加を希望する</h2><p style="margin:0;color:var(--warn)">この主催者の釣行には申し込みできません。</p>`
