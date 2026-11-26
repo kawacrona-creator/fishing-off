@@ -319,6 +319,8 @@ const LEVELS=["初心者歓迎","誰でも","経験者向け"];
 /* --- Supabase DB helpers --- */
 let _dbEvents=[];  // DBから取得したイベント
 let _dbApps={};    // event_id -> [{name,experience,message}]
+let _dbBlocks=[];  // 自分がブロックしたユーザーID一覧
+let _allBlocks={}; // organizer_id -> [blocked_user_id]
 async function loadEvents(){
   if(!_supabase)return;
   try{
@@ -345,7 +347,22 @@ async function loadApplications(){
     });
   }catch(e){console.error("applications取得例外:",e)}
 }
-async function loadAllData(){await Promise.all([loadEvents(),loadApplications()])}
+async function loadBlocks(){
+  if(!_supabase)return;
+  try{
+    const {data,error}=await _supabase.from("blocked_users").select("*");
+    if(error){console.error("blocks取得エラー:",error);return}
+    _allBlocks={};
+    _dbBlocks=[];
+    (data||[]).forEach(r=>{
+      if(!_allBlocks[r.organizer_id])_allBlocks[r.organizer_id]=[];
+      _allBlocks[r.organizer_id].push(r.blocked_user_id);
+      if(currentUser&&r.organizer_id===currentUser.id)_dbBlocks.push(r.blocked_user_id);
+    });
+  }catch(e){console.error("blocks取得例外:",e)}
+}
+function isBlocked(organizer_id,user_id){return (_allBlocks[organizer_id]||[]).includes(user_id)}
+async function loadAllData(){await Promise.all([loadEvents(),loadApplications(),loadBlocks()])}
 /* localStorage fallback for offline / sample data */
 const KEY="fishing-off-v1";
 let S={posted:[],applied:{}};
@@ -522,6 +539,7 @@ function viewEvent(id){
     </section>
     <section class="panel ${mine.length?"ok":""}" id="apply">
       ${mine.length?`<h2>参加希望を保存しました</h2><p style="margin:0">${esc(mine[mine.length-1].name)}さんの参加希望をこのブラウザに保存しました。試作版のため、主催者への通知は行われません。</p>`
+      :(currentUser&&e.user_id&&isBlocked(e.user_id,currentUser.id))?`<h2>参加を希望する</h2><p style="margin:0;color:var(--warn)">この主催者の釣行には申し込みできません。</p>`
       :left<=0?`<h2>参加を希望する</h2><p style="margin:0" class="note">この釣行は満員です。</p>`
       :`<h2>参加を希望する</h2>
       <form class="form" id="af" novalidate>
@@ -533,7 +551,34 @@ function viewEvent(id){
         <div class="note">参加は無料の会員登録なしで申し込めます。キャンセルは主催者に直接連絡してください。</div>
       </form>`}
     </section>
+    ${(currentUser&&e.fromDB&&e.user_id===currentUser.id)?(()=>{
+      const apps=_dbApps[e.id]||[];
+      return `<section class="panel"><h2>申し込み者一覧（主催者用）</h2>
+        ${apps.length?`<div style="display:flex;flex-direction:column;gap:12px">${apps.map(a=>{
+          const blocked=_dbBlocks.includes(a.user_id);
+          return `<div style="border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <div><b>${esc(a.name)}</b> <span class="note">(${esc(a.exp)})</span>${a.msg?`<div style="font-size:13px;margin-top:4px;color:var(--muted)">${esc(a.msg)}</div>`:""}</div>
+            ${a.user_id?`<button class="btn ${blocked?"ghost":"danger"}" style="font-size:12px;padding:4px 12px" data-block-uid="${a.user_id}" data-block-name="${esc(a.name)}">${blocked?"ブロック解除":"ブロック"}</button>`:""}
+          </div>`}).join("")}</div>`:`<p class="note" style="margin:0">まだ申し込みはありません。</p>`}
+      </section>`})():""}
   </div>`;
+  /* ブロック/解除ボタン */
+  document.querySelectorAll("[data-block-uid]").forEach(btn=>{
+    btn.onclick=async()=>{
+      const uid=btn.dataset.blockUid;const name=btn.dataset.blockName;
+      const isBlocked=_dbBlocks.includes(uid);
+      if(isBlocked){
+        const {error}=await _supabase.from("blocked_users").delete().eq("organizer_id",currentUser.id).eq("blocked_user_id",uid);
+        if(error){alert("解除に失敗しました");return}
+      }else{
+        if(!confirm(name+"さんをブロックしますか？\\nこのユーザーはあなたの釣行に申し込めなくなります。"))return;
+        const {error}=await _supabase.from("blocked_users").insert({organizer_id:currentUser.id,blocked_user_id:uid});
+        if(error){alert("ブロックに失敗しました");return}
+      }
+      await loadBlocks();
+      viewEvent(id);
+    };
+  });
   const f=$("af");
   if(f)f.onsubmit=async ev=>{ev.preventDefault();
     const name=$("an").value.trim();
