@@ -243,13 +243,14 @@ async function initAuth(){
       bio:u.user_metadata?.bio||""
     };
   }
+  await loadAllData();
   _authReady=true;
   updateAuthUI();
   route();
 }
 
 /* 認証状態の変化を監視 */
-if(_supabase) _supabase.auth.onAuthStateChange((event,session)=>{
+if(_supabase) _supabase.auth.onAuthStateChange(async(event,session)=>{
   if(session){
     const u=session.user;
     currentUser={
@@ -263,6 +264,7 @@ if(_supabase) _supabase.auth.onAuthStateChange((event,session)=>{
     currentUser=null;
   }
   if(_authReady){
+    await loadAllData();
     updateAuthUI();
     /* OAuth リダイレクト後: access_tokenがURLにあればマイページへ */
     if(session && location.hash.includes("access_token=")){
