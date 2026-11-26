@@ -243,7 +243,7 @@ async function initAuth(){
       bio:u.user_metadata?.bio||""
     };
   }
-  await loadAllData();
+  try{await loadAllData();}catch(e){console.error("データ読み込みエラー:",e)}
   _authReady=true;
   updateAuthUI();
   route();
@@ -264,7 +264,7 @@ if(_supabase) _supabase.auth.onAuthStateChange(async(event,session)=>{
     currentUser=null;
   }
   if(_authReady){
-    await loadAllData();
+    try{await loadAllData();}catch(e){console.error("データ読み込みエラー:",e)}
     updateAuthUI();
     /* OAuth リダイレクト後: access_tokenがURLにあればマイページへ */
     if(session && location.hash.includes("access_token=")){
