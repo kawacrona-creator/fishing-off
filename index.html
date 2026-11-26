@@ -222,10 +222,20 @@ footer{margin-top:40px;color:var(--muted);font-size:12.5px;border-top:1px solid 
 var currentUser=null;
 var _authReady=false;
 var _supabase=null;
+/* ストレージがブロックされても動くようにカスタムストレージを使用 */
+var _safeStorage=(function(){
+  var mem={};
+  try{localStorage.setItem("__test","1");localStorage.removeItem("__test");
+    return localStorage;
+  }catch(e){
+    return {getItem:function(k){return mem[k]||null},setItem:function(k,v){mem[k]=v},removeItem:function(k){delete mem[k]}};
+  }
+})();
 try{
   _supabase = window.supabase.createClient(
     'https://ltqsmfzrwqluylgzxpbt.supabase.co',
-    'sb_publishable_44qx2s3Nmbg2H-g-F8xotQ_kx7xTuBg'
+    'sb_publishable_44qx2s3Nmbg2H-g-F8xotQ_kx7xTuBg',
+    {auth:{storage:_safeStorage,autoRefreshToken:true,persistSession:true,detectSessionInUrl:true}}
   );
 }catch(e){console.error("Supabase初期化エラー:",e)}
 
