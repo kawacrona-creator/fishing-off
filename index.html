@@ -330,18 +330,52 @@ function areaOptions(sel,withCount){
   return REGIONS.map(([r,list])=>`<optgroup label="${r}">${list.map(a=>`<option value="${a}"${sel===a?" selected":""}>${a}${withCount&&c[a]?`(${c[a]}件)`:""}</option>`).join("")}</optgroup>`).join("");
 }
 const LEVELS=["初心者歓迎","誰でも","経験者向け"];
-/* --- Supabase DB helpers --- */
-let _dbEvents=[];  // DBから取得したイベント
-let _dbApps={};    // event_id -> [{name,experience,message}]
-let _dbBlocks=[];  // 自分がブロックしたユーザーID一覧
-let _allBlocks={}; // organizer_id -> [blocked_user_id]
-async function loadEvents(){
-  if(!_supabase)return;
+/* --- Supabase DB helpers (fetch直接版) --- */
+const SB_URL='https://ltqsmfzrwqluylgzxpbt.supabase.co';
+const SB_KEY='sb_publishable_44qx2s3Nmbg2H-g-F8xotQ_kx7xTuBg';
+function sbHeaders(token){
+  const h={'apikey':SB_KEY,'Content-Type':'application/json','Authorization':'Bearer '+(token||SB_KEY)};
+  return h;
+}
+function sbToken(){
   try{
-    console.log("loadEvents: クエリ開始");
-    const {data,error}=await _supabase.from("events").select("*").order("date",{ascending:true});
-    console.log("loadEvents: data=",JSON.stringify(data?.length),"件, error=",error);
-    if(error){console.error("events取得エラー:",error);return}
+    if(_supabase&&_supabase.auth){
+      const s=_safeStorage.getItem('sb-ltqsmfzrwqluylgzxpbt-auth-token');
+      if(s){const p=JSON.parse(s);if(p.access_token)return p.access_token}
+    }
+  }catch(e){}
+  return SB_KEY;
+}
+async function sbGet(table,query){
+  const res=await fetch(SB_URL+'/rest/v1/'+table+'?'+query,{headers:sbHeaders(sbToken())});
+  if(!res.ok){console.error(table+'取得エラー:',res.status);return[]}
+  return await res.json();
+}
+async function sbInsert(table,row){
+  const res=await fetch(SB_URL+'/rest/v1/'+table,{method:'POST',headers:{...sbHeaders(sbToken()),'Prefer':'return=representation'},body:JSON.stringify(row)});
+  if(!res.ok){const t=await res.text();return {data:null,error:{message:t}}}
+  const data=await res.json();
+  return {data:Array.isArray(data)?data[0]:data,error:null};
+}
+async function sbUpdate(table,match,updates){
+  let q=Object.entries(match).map(([k,v])=>k+'=eq.'+v).join('&');
+  const res=await fetch(SB_URL+'/rest/v1/'+table+'?'+q,{method:'PATCH',headers:{...sbHeaders(sbToken()),'Prefer':'return=representation'},body:JSON.stringify(updates)});
+  if(!res.ok){const t=await res.text();return {error:{message:t}}}
+  return {error:null};
+}
+async function sbDelete(table,match){
+  let q=Object.entries(match).map(([k,v])=>k+'=eq.'+v).join('&');
+  const res=await fetch(SB_URL+'/rest/v1/'+table+'?'+q,{method:'DELETE',headers:sbHeaders(sbToken())});
+  if(!res.ok){const t=await res.text();return {error:{message:t}}}
+  return {error:null};
+}
+let _dbEvents=[];
+let _dbApps={};
+let _dbBlocks=[];
+let _allBlocks={};
+async function loadEvents(){
+  try{
+    const data=await sbGet('events','select=*&order=date.asc');
     _dbEvents=(data||[]).map(r=>({
       id:r.id, user_id:r.user_id, title:r.title, type:r.type, area:r.area, place:r.place,
       mapUrl:r.map_url||"", date:r.date, time:r.time, end:r.end_time||"",
@@ -352,10 +386,8 @@ async function loadEvents(){
   }catch(e){console.error("events取得例外:",e)}
 }
 async function loadApplications(){
-  if(!_supabase)return;
   try{
-    const {data,error}=await _supabase.from("applications").select("*");
-    if(error){console.error("applications取得エラー:",error);return}
+    const data=await sbGet('applications','select=*');
     _dbApps={};
     (data||[]).forEach(r=>{
       if(!_dbApps[r.event_id])_dbApps[r.event_id]=[];
@@ -364,10 +396,8 @@ async function loadApplications(){
   }catch(e){console.error("applications取得例外:",e)}
 }
 async function loadBlocks(){
-  if(!_supabase)return;
   try{
-    const {data,error}=await _supabase.from("blocked_users").select("*");
-    if(error){console.error("blocks取得エラー:",error);return}
+    const data=await sbGet('blocked_users','select=*');
     _allBlocks={};
     _dbBlocks=[];
     (data||[]).forEach(r=>{
@@ -381,21 +411,14 @@ function isBlocked(organizer_id,user_id){return (_allBlocks[organizer_id]||[]).i
 
 /* メッセージ関連 */
 async function loadEventMessages(eventId){
-  if(!_supabase)return[];
   try{
-    const {data,error}=await _supabase.from("messages").select("*").eq("event_id",eventId).order("created_at",{ascending:true});
-    if(error){console.error("msg取得エラー:",error);return[]}
-    return data||[];
+    return await sbGet('messages','select=*&event_id=eq.'+eventId+'&order=created_at.asc');
   }catch(e){return[]}
 }
 async function loadDMs(){
-  if(!_supabase||!currentUser)return[];
+  if(!currentUser)return[];
   try{
-    const {data,error}=await _supabase.from("messages").select("*").is("event_id",null)
-      .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
-      .order("created_at",{ascending:true});
-    if(error){console.error("DM取得エラー:",error);return[]}
-    return data||[];
+    return await sbGet('messages','select=*&event_id=is.null&or=(sender_id.eq.'+currentUser.id+',receiver_id.eq.'+currentUser.id+')&order=created_at.asc');
   }catch(e){return[]}
 }
 function msgTime(ts){const d=new Date(ts);return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`}
@@ -619,11 +642,11 @@ function viewEvent(id){
       const uid=btn.dataset.blockUid;const name=btn.dataset.blockName;
       const isBlocked=_dbBlocks.includes(uid);
       if(isBlocked){
-        const {error}=await _supabase.from("blocked_users").delete().eq("organizer_id",currentUser.id).eq("blocked_user_id",uid);
+        const {error}=await sbDelete('blocked_users',{organizer_id:currentUser.id,blocked_user_id:uid});
         if(error){alert("解除に失敗しました");return}
       }else{
         if(!confirm(name+"さんをブロックしますか？\\nこのユーザーはあなたの釣行に申し込めなくなります。"))return;
-        const {error}=await _supabase.from("blocked_users").insert({organizer_id:currentUser.id,blocked_user_id:uid});
+        const {error}=await sbInsert('blocked_users',{organizer_id:currentUser.id,blocked_user_id:uid});
         if(error){alert("ブロックに失敗しました");return}
       }
       await loadBlocks();
@@ -651,7 +674,7 @@ function viewEvent(id){
       ev.preventDefault();
       const txt=$("msg-input").value.trim();if(!txt)return;
       const receiver_id=e.user_id===currentUser.id?null:e.user_id;
-      const {error}=await _supabase.from("messages").insert({sender_id:currentUser.id,receiver_id:receiver_id||e.user_id,event_id:e.id,message:txt});
+      const {error}=await sbInsert('messages',{sender_id:currentUser.id,receiver_id:receiver_id||e.user_id,event_id:e.id,message:txt});
       if(error){alert("送信に失敗しました");return}
       $("msg-input").value="";
       const msgs=await loadEventMessages(e.id);
@@ -676,13 +699,13 @@ function viewEvent(id){
     /* Supabaseに保存を試みる */
     if(_supabase){
       const row={event_id:e.id,user_id:currentUser?currentUser.id:null,name:name,experience:$("ae").value,message:$("am").value.trim()};
-      const {error}=await _supabase.from("applications").insert(row);
+      const {error}=await sbInsert('applications',row);
       if(error){console.error("申込エラー:",error);$("aerr").textContent="保存に失敗しました: "+error.message;return}
       /* 主催者に通知メールを送信（非同期・失敗してもOK） */
       try{
         fetch("https://ltqsmfzrwqluylgzxpbt.supabase.co/functions/v1/swift-handler",{
           method:"POST",
-          headers:{"Content-Type":"application/json","apikey":_supabase.supabaseKey,"Authorization":"Bearer "+(await _supabase.auth.getSession()).data.session?.access_token},
+          headers:{"Content-Type":"application/json","apikey":SB_KEY,"Authorization":"Bearer "+sbToken()},
           body:JSON.stringify({event_id:e.id,applicant_name:name,experience:$("ae").value,message:$("am").value.trim()})
         }).catch(err=>console.log("通知送信エラー:",err));
       }catch(ne){console.log("通知エラー:",ne)}
@@ -793,13 +816,11 @@ function viewPost(){
       fish:v("pf2"),level:v("plv"),fee:Math.max(0,parseInt(v("pfee"))||0),cap,joined:1,org:v("pog"),rental:$("prent").checked,access:[...document.querySelectorAll('input[name="acc"]:checked')].map(i=>i.value),mapUrl:mp,
       items:v("pit")||"特になし",desc:v("pds")||"詳しくは当日お伝えします。"};
     /* Supabaseに保存を試みる */
-    if(_supabase && currentUser){
+    if(currentUser){
       const row={user_id:currentUser.id,title:e.title,type:e.type,area:e.area,place:e.place,
         map_url:e.mapUrl,date:e.date,time:e.time,end_time:e.end,fish:e.fish,level:e.level,
         fee:e.fee,cap:e.cap,org:e.org,rental:e.rental,access:e.access,items:e.items,description:e.desc};
-      console.log("投稿: insert開始, currentUser=",currentUser?.id);
-      const {data,error}=await _supabase.from("events").insert(row).select().single();
-      console.log("投稿結果: data=",data,"error=",error);
+      const {data,error}=await sbInsert('events',row);
       if(error){console.error("投稿エラー:",error);$("perr").textContent="保存に失敗しました: "+error.message;return}
       await loadAllData();
       location.hash="event-"+data.id;
@@ -966,7 +987,7 @@ function viewMy(){
     btn.disabled=true;btn.textContent="処理中…";msg.textContent="";
     try{
       const res=await fetch("https://ltqsmfzrwqluylgzxpbt.supabase.co/functions/v1/checkout",{
-        method:"POST",headers:{"Content-Type":"application/json","apikey":_supabase.supabaseKey},
+        method:"POST",headers:{"Content-Type":"application/json","apikey":SB_KEY},
         body:JSON.stringify({user_id:currentUser.id,email:currentUser.email})
       });
       const data=await res.json();
@@ -1017,14 +1038,14 @@ async function viewDM(h){
     $("dm-form").onsubmit=async ev=>{
       ev.preventDefault();
       const txt=$("dm-input").value.trim();if(!txt)return;
-      const {error}=await _supabase.from("messages").insert({sender_id:currentUser.id,receiver_id:partnerId,event_id:null,message:txt});
+      const {error}=await sbInsert('messages',{sender_id:currentUser.id,receiver_id:partnerId,event_id:null,message:txt});
       if(error){alert("送信に失敗しました");return}
       $("dm-input").value="";
       viewDM(h);
     };
     /* 未読を既読にする */
     chat.filter(m=>m.receiver_id===currentUser.id&&!m.is_read).forEach(m=>{
-      _supabase.from("messages").update({is_read:true}).eq("id",m.id).then(()=>{});
+      sbUpdate('messages',{id:m.id},{is_read:true}).catch(()=>{});
     });
   } else {
     /* DM一覧画面 */
