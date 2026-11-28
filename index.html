@@ -929,7 +929,7 @@ function viewOrganizers(){
     const btn=$("org-plan-btn");const msg=$("org-plan-msg");
     btn.disabled=true;btn.textContent="処理中…";msg.textContent="";
     try{
-      const res=await fetch(SB_URL+"/functions/v1/checkout",{
+      const res=await fetch(SB_URL+"/functions/v1/cheak-out",{
         method:"POST",headers:{"Content-Type":"application/json","apikey":SB_KEY},
         body:JSON.stringify({user_id:currentUser.id,email:currentUser.email})
       });
@@ -1041,7 +1041,7 @@ function viewMy(){
     const btn=$("stripe-checkout");const msg=$("stripe-msg");
     btn.disabled=true;btn.textContent="処理中…";msg.textContent="";
     try{
-      const res=await fetch("https://ltqsmfzrwqluylgzxpbt.supabase.co/functions/v1/checkout",{
+      const res=await fetch("https://ltqsmfzrwqluylgzxpbt.supabase.co/functions/v1/cheak-out",{
         method:"POST",headers:{"Content-Type":"application/json","apikey":SB_KEY},
         body:JSON.stringify({user_id:currentUser.id,email:currentUser.email})
       });
